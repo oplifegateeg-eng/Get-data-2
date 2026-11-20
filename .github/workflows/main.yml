@@ -9,24 +9,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Find the Gradle project folder
+        id: proj
+        run: |
+          f=$(find . -name settings.gradle.kts -not -path './.git/*' | head -n 1)
+          if [ -z "$f" ]; then
+            echo "settings.gradle.kts was not found in the repository. Upload the project files (app, gradle, build.gradle.kts, settings.gradle.kts, gradle.properties)."
+            exit 1
+          fi
+          d=$(dirname "$f")
+          echo "Project folder: $d"
+          echo "dir=$d" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-      - name: Accept Android SDK licenses (the SDK is already installed on the runner)
+      - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager --licenses || true
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+          build-root-directory: ${{ steps.proj.outputs.dir }}
       - name: Build debug APK
+        working-directory: ${{ steps.proj.outputs.dir }}
         run: gradle assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: wa-groups-exporter-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ steps.proj.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk
       - name: Publish the APK as a download (Releases page)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-build-${{ github.run_number }}
           name: WhatsApp Groups Exporter APK (build ${{ github.run_number }})
-          files: app/build/outputs/apk/debug/app-debug.apk
+          files: ${{ steps.proj.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk
